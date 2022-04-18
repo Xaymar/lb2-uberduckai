@@ -1,0 +1,259 @@
+[extension_name]
+UberduckAI
+
+[extension_info]
+AI-driven text generation.
+
+[insert_external]
+<label>API Key
+    <input type="text" id="uberduck_api_key" name="uberduck_api_key" size="32">
+</label><br>
+<label>API Secret
+    <input type="password" id="uberduck_api_secret" name="uberduck_api_secret" size="32">
+</label><br>
+<label>CORS Proxy
+    <input type="text" id="uberduck_cors_proxy" name="uberduck_cors_proxy" size="32">
+</label><br>
+
+[insert_command]
+LB.extCommand('UberduckAI Speak', 0xFFFFFFFF, 52, {
+    text: ["Text", 0, 'Hello World!', 2.0],
+    voice: ["Voice", 20, 'soldier', 0.5, ['soldier', 'scout', 'spy']],
+    variable: ["Variable", 0, '', 0.5],
+});
+
+[insert_hook]
+case "UberduckAI Speak": {
+    UberduckAI_Speak(LioranBoardJSON);
+    break;
+}
+
+[insert_script]
+/* Uberduck.AI Integration
+ *
+ * A request to the API for speech synthesis can either be done synchronously,
+ * or asynchronously. We picked the asynchronous method here, as the API tends
+ * to randomly take up to 300 seconds to complete the request. Therefore we
+ * need to deal with two semi-asynchronous APIs simultaneously, and the easiest
+ * way to do that is to be asynchronous ourselves. Two birds with one stone.
+ * 
+ * The API has three different calls that we can do:
+ * - speak: Enqueues a speech synthesis request, for which we will get a UUID.
+ * - speak-status: Checks on the status of a speech synthesis request and 
+ *   returns information about said request. It will contain a path to a file
+ *   if the request succeeded.
+ * - speak-synchronously: Perform speech synthesis synchronously, keeping the
+ *   connection open until it is done. Because of the random delay between a
+ *   request and completion, this is out of the question and useless.
+ *
+ * Armed with this knowledge, we need to expose the following:
+ * - A way for the user to enqueue a speech synthesis request to the API and at
+ * a later point in time get the result from said request.
+ * - A way for the user to have buttons triggered by the result of a speech
+ *   synthesis request, for all three status: Pending, Failure, Success.
+ *
+ * As LioranBoard 2 does not offer a direct way to play media files from the
+ * web, the best way to handle the playback of audio is to directly offer it as
+ * Base64 encoded text. That way the user can use "Buffer Save" to save the 
+ * audio to a file and play it back with whatever software they want.
+ * 
+ */
+
+function UberduckAI_getItem(key, def) {
+    let v = localStorage.getItem(key);
+    return (v !== null) ? v : ((def !== undefined) ? def : "");
+}
+function UberduckAI_GetAPIKey() { return UberduckAI_getItem("uberduck_api_key"); }
+function UberduckAI_GetAPISecret() { return UberduckAI_getItem("uberduck_api_secret"); }
+function UberduckAI_GetAuthHeader() { return btoa(`${UberduckAI_GetAPIKey()}:${UberduckAI_GetAPISecret()}`); }
+function UberduckAI_GetCORSProxy() { return UberduckAI_getItem("uberduck_cors_proxy", "https://tools.xaymar.com/lioranboard/cors-proxy.php"); }
+
+function UberduckAI_DoRequest(resource, init) {
+    // Build a query for the CORS Proxy.
+    let url = new URL(UberduckAI_GetCORSProxy());
+    let query = {
+        url: resource,
+    }
+    if (init) {
+        if (init.headers) {
+            query.headers = init.headers;
+            init.headers = undefined;
+        }
+        if (init.body) {
+            query.body = init.body;
+            init.body = undefined;
+        }
+        init.mode = "cors";
+        init.cache = "no-cache";
+    }
+    url.search = `?${JSON.stringify(query)}`;
+
+    return fetch(url, init);
+}
+
+function UberduckAI_Load() {
+    uberduck_api_key.value = UberduckAI_GetAPIKey();
+    uberduck_api_key.addEventListener("change", (ev) => {
+        localStorage.setItem("uberduck_api_key", ev.target.value);
+    });
+    uberduck_api_secret.value = UberduckAI_GetAPISecret();
+    uberduck_api_secret.addEventListener("change", (ev) => {
+        localStorage.setItem("uberduck_api_secret", ev.target.value);
+    });
+    uberduck_cors_proxy.value = UberduckAI_GetCORSProxy();
+    uberduck_cors_proxy.addEventListener("change", (ev) => {
+        localStorage.setItem("uberduck_cors_proxy", ev.target.value);
+    });
+}
+UberduckAI_Load();
+
+function UberduckAI_TriggerFailure(buttonId, uniqueId, text, voice, variable) {
+    LB.triggerExt("UberduckAI Failure", {
+        "button": buttonId,
+        "uuid": uniqueId,
+        "text": text,
+        "voice": voice,
+        "variable": variable,
+    });
+}
+function UberduckAI_TriggerPending(buttonId, uniqueId, text, voice, variable) {
+    LB.triggerExt("UberduckAI Pending", {
+        "button": buttonId,
+        "uuid": uniqueId,
+        "text": text,
+        "voice": voice,
+        "variable": variable,
+    });
+}
+function UberduckAI_TriggerLoading(buttonId, uniqueId, text, voice, variable) {
+    LB.triggerExt("UberduckAI Loading", {
+        "button": buttonId,
+        "uuid": uniqueId,
+        "text": text,
+        "voice": voice,
+        "variable": variable,
+    });
+}
+function UberduckAI_TriggerSuccess(buttonId, uniqueId, text, voice, variable, url, data) {
+    LB.triggerExt("UberduckAI Success", {
+        "button": buttonId,
+        "uuid": uniqueId,
+        "text": text,
+        "voice": voice,
+        "variable": variable,
+        "url": url,
+        "data": data,
+    });
+}
+
+function UberduckAI_Speak(args) {
+    let button = args.FromButton;
+    let text = args.text.length > 0 ? args.text : "Hello World!";
+    let voice = args.voice.length > 0 ? args.voice : "lj";
+    let variable = args.variable !== null ? (args.variable.length > 0 ? args.variable : null) : null;
+
+    UberduckAI_DoRequest("https://api.uberduck.ai/speak", {
+        headers: [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            `Authorization: Basic ${UberduckAI_GetAuthHeader()}`,
+        ],
+        body: JSON.stringify({
+            "speech": text,
+            "voice": voice,
+        }),
+        method: "POST",
+        redirect: "follow",
+    }).catch((error) => {
+        console.error(error);
+        UberduckAI_TriggerFailure(button, null, text, voice, variable);
+    }).then((response) => {
+        if (response.status == 200) {
+            response.json(
+
+            ).catch((error) => {
+                console.error(error);
+                UberduckAI_TriggerFailure(button, null, text, voice, variable);
+            }).then((result) => {
+                UberduckAI_TriggerPending(button, result.uuid, text, voice, variable);
+                UberduckAI_Query(button, result.uuid, text, voice, variable);
+            });
+        } else {
+            UberduckAI_TriggerFailure(button, null, text, voice, variable);
+        }
+    });
+}
+
+function UberduckAI_Query(button, uuid, text, voice, variable) {
+    // Big brain energy, don't repeat code that should be identical!
+    window.setTimeout(() => { 
+        let url = new URL("https://api.uberduck.ai/speak-status");
+        url.searchParams.set('uuid', uuid);
+        UberduckAI_DoRequest(url, {
+            headers: [
+                `Authorization: Basic ${UberduckAI_GetAuthHeader()}`,
+            ],
+            method: "GET",
+            redirect: "follow",
+        }).catch((error) => {
+            // ToDo: Implement limited retries for timeouts and similar extreme failures.
+            UberduckAI_Query(button, uuid, text, voice, variable);
+        }).then((response) => {
+            if (response.status == 200) {
+                response.json(
+
+                ).catch((error) => {
+                    console.error(error);
+                    UberduckAI_TriggerFailure(button, uuid, text, voice, variable);
+                }).then((result) => {
+                    if (result.path !== null) {
+                        UberduckAI_TriggerLoading(button, uuid, text, voice, variable);
+                        UberduckAI_Download(button, uuid, text, voice, variable, result.path);
+                    } else if (result.failed_at !== null) {
+                        console.error(result);
+                        UberduckAI_TriggerFailure(button, uuid, text, voice, variable);
+                    } else {
+                        // ToDo: Implement limited retries for still pending requests.
+                        UberduckAI_Query(button, uuid, text, voice, variable);
+                    }
+                });
+            } else {
+                // ToDo: Implement limited retries for simple failures.
+                UberduckAI_Query(button, uuid, text, voice, variable);
+            }
+        });
+    }, 2500); // On average, requests finish within 2.5 seconds.
+}
+
+function UberduckAI_Download(button, uuid, text, voice, variable, path) {
+    UberduckAI_DoRequest(path, {
+        method: "GET",
+        headers: [
+//            `Authorization: Basic ${UberduckAI_GetAuthHeader()}`,
+        ],
+        mode: "no-cors",
+        cache: "no-cache",
+    }).catch((error) => {
+        console.error(error);
+        UberduckAI_TriggerFailure(button, null, text, voice, variable);
+    }).then((response) => {
+        response.blob(
+
+        ).catch((error) => {
+            console.error(error);
+            UberduckAI_TriggerFailure(button, null, text, voice, variable);
+        }).then((blob) => {
+            let reader = new FileReader();
+            reader.onloadend = function() {
+                let rb64 = reader.result.substr("data:binary\/octet-stream;base64,".length);
+                if (variable !== null) {
+                    LB.setVariable(variable, rb64, button);
+                }
+                UberduckAI_TriggerSuccess(button, uuid, text, voice, variable, path, rb64);
+            };
+            reader.readAsDataURL(blob);
+        });
+    });
+}
+
+[insert_over]
