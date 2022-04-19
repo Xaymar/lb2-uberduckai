@@ -35,14 +35,14 @@ The CORS Proxy address used to bypass CORS restrictions on `file://` origins. Th
 ### Command: `UberduckAI Speak`
 Enqueue a new speech synthesis request to the Uberduck.AI API, with the following parameters:
 
-* **Text (`text`):**
+* **Text (`text`):**  
     Text which should be synthesized into speech. Text should ideally be limited in length to prevent issues.
-* **Voice (`voice`):**
+* **Voice (`voice`):**  
     Unique name of the voice model to use, can be manually typed in. The voice model must exist or else the request will fail.
-* **Variable (`variable`):**
+* **Variable (`variable`):**  
     If used in `Wait Until Variable Exists` mode, the variable that should be created upon success. Note that the triggers failure, pending, loading and success will still happen in this mode and should be preferred.
 
-#### Trigger: `UberduckAI Failure`
+### Trigger: `UberduckAI Failure`
 A previous speech synthesis request failed.
 
 ```js
