@@ -1,6 +1,8 @@
 # Uberduck.AI for LioranBoard 2
 With Uberduck.AI it is possible to generate custom trained voices, and now it's available directly in LioranBoard 2! All you need is a Uberduck.AI account, some time and creativity, and your stream will level up. And a web server of some kind if you don't trust mine.
 
+See it in action: [YouTube Preview](https://youtu.be/LFUogPnFis4)
+
 ## Important Information & Privacy concerns
 - Because `file://` results in an `Origin` of `null`, a proxy request is made to a hosted script to bypass the CORS problem. See `cors_proxy.php` for the implementation of the proxy script, which is what the extension defaults to. You should host this script locally using XAMPP or similar solutions.
 
