@@ -5,15 +5,50 @@ UberduckAI
 AI-driven text generation.
 
 [insert_external]
-<label>API Key
-    <input type="text" id="uberduck_api_key" name="uberduck_api_key" size="32">
-</label><br>
-<label>API Secret
-    <input type="password" id="uberduck_api_secret" name="uberduck_api_secret" size="32">
-</label><br>
-<label>CORS Proxy
-    <input type="text" id="uberduck_cors_proxy" name="uberduck_cors_proxy" size="32">
-</label><br>
+<label class="uberduck_api_key">
+    <span>API Key</span>
+    <input type="text" id="uberduck_api_key" name="uberduck_api_key">
+</label>
+<label class="uberduck_api_secret">
+    <span>API Secret</span>
+    <input type="password" id="uberduck_api_secret" name="uberduck_api_secret">
+</label>
+<label class="uberduck_cors_proxy">
+    <span>CORS Proxy</span>
+    <input type="text" id="uberduck_cors_proxy" name="uberduck_cors_proxy">
+</label>
+<label class="uberduck_query_delay">
+    <span>Status Query Delay</span>
+    <input type="number" id="uberduck_query_delay" name="uberduck_query_delay" min="500" max="10000" step="50">
+</label>
+<style>
+    #content-UberduckAI label {
+        display: grid;
+        grid-template-columns: 1fr 3fr;
+        width: 100%;
+    }
+    #content-UberduckAI label > span {
+        display: block;
+    }
+    #content-UberduckAI label > input {
+        display: block;
+    }
+
+    #content-UberduckAI label.uberduck_query_delay {
+        position: relative;
+    }
+    #content-UberduckAI label.uberduck_query_delay > input {
+        text-align: right;
+        width: calc(100% - 2.5rem);
+    }
+    #content-UberduckAI label.uberduck_query_delay::after {
+        content: "ms";
+        position: absolute;
+        right: 0.5rem;
+        top: 0rem;
+        bottom: 0rem;
+    }
+</style>
 
 [insert_command]
 LB.extCommand('UberduckAI Speak', 0xFFFFFFFF, 52, {
@@ -66,6 +101,7 @@ function UberduckAI_getItem(key, def) {
 function UberduckAI_GetAPIKey() { return UberduckAI_getItem("uberduck_api_key"); }
 function UberduckAI_GetAPISecret() { return UberduckAI_getItem("uberduck_api_secret"); }
 function UberduckAI_GetAuthHeader() { return btoa(`${UberduckAI_GetAPIKey()}:${UberduckAI_GetAPISecret()}`); }
+function UberduckAI_GetQueryDelay() { return UberduckAI_getItem("uberduck_query_delay", 2500); }
 function UberduckAI_GetCORSProxy() { return UberduckAI_getItem("uberduck_cors_proxy", "https://tools.xaymar.com/lioranboard/cors-proxy.php"); }
 
 function UberduckAI_DoRequest(resource, init) {
@@ -103,6 +139,10 @@ function UberduckAI_Load() {
     uberduck_cors_proxy.value = UberduckAI_GetCORSProxy();
     uberduck_cors_proxy.addEventListener("change", (ev) => {
         localStorage.setItem("uberduck_cors_proxy", ev.target.value);
+    });
+    uberduck_query_delay.value = UberduckAI_GetQueryDelay();
+    uberduck_query_delay.addEventListener("change", (ev) => {
+        localStorage.setItem("uberduck_query_delay", ev.target.value);
     });
 }
 UberduckAI_Load();
@@ -222,7 +262,7 @@ function UberduckAI_Query(button, uuid, text, voice, variable) {
                 UberduckAI_Query(button, uuid, text, voice, variable);
             }
         });
-    }, 2500); // On average, requests finish within 2.5 seconds.
+    }, UberduckAI_GetQueryDelay());
 }
 
 function UberduckAI_Download(button, uuid, text, voice, variable, path) {
